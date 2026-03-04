@@ -1,0 +1,385 @@
+// ============================================================
+// NeuralBox Campus IA — Prisma Schema
+// Base de datos: PostgreSQL
+// Version: 1.0
+// ============================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── USERS ──────────────────────────────────────────────────
+
+enum Role {
+  STUDENT
+  ADMIN
+}
+
+model User {
+  id            String   @id @default(cuid())
+  email         String   @unique
+  passwordHash  String   @map("password_hash")
+  name          String
+  avatar        String?
+  role          Role     @default(STUDENT)
+  xp            Int      @default(0)
+  level         Int      @default(1)
+  streak        Int      @default(0)
+  lastActiveAt  DateTime? @map("last_active_at")
+  isActive      Boolean  @default(true) @map("is_active")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  subscriptions Subscription[]
+  payments      Payment[]
+  enrollments   Enrollment[]
+  progress      Progress[]
+  posts         Post[]
+  reactions     Reaction[]
+  xpLogs        XpLog[]
+  badges        UserBadge[]
+  refreshTokens RefreshToken[]
+
+  @@map("users")
+}
+
+model RefreshToken {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  userId    String   @map("user_id")
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([token])
+  @@index([userId])
+  @@map("refresh_tokens")
+}
+
+// ─── SUBSCRIPTIONS & PAYMENTS ───────────────────────────────
+
+enum PlanType {
+  PREVENTA
+  MONTHLY
+  SEMIANNUAL
+  ANNUAL
+}
+
+enum SubStatus {
+  ACTIVE
+  EXPIRED
+  CANCELLED
+  GRACE_PERIOD
+  PENDING
+}
+
+enum Gateway {
+  WOMPI
+  MERCADOPAGO
+  PAYPAL
+  CRYPTAPI
+  MANUAL
+}
+
+enum PaymentStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  REFUNDED
+}
+
+model Subscription {
+  id         String    @id @default(cuid())
+  userId     String    @map("user_id")
+  plan       PlanType
+  status     SubStatus @default(PENDING)
+  gateway    Gateway
+  gatewayId  String?   @map("gateway_id")  // External subscription ID
+  amount     Int                            // Amount in cents (COP or USD x100)
+  currency   String    @default("COP")
+  startsAt   DateTime  @map("starts_at")
+  expiresAt  DateTime  @map("expires_at")
+  cancelledAt DateTime? @map("cancelled_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  updatedAt  DateTime  @updatedAt @map("updated_at")
+
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  payments Payment[]
+
+  @@index([userId])
+  @@index([status])
+  @@index([expiresAt])
+  @@map("subscriptions")
+}
+
+model Payment {
+  id             String        @id @default(cuid())
+  userId         String        @map("user_id")
+  subscriptionId String?       @map("subscription_id")
+  amount         Int                                   // Amount in cents
+  currency       String        @default("COP")
+  gateway        Gateway
+  gatewayTxId    String?       @map("gateway_tx_id")   // External transaction ID
+  status         PaymentStatus @default(PENDING)
+  metadata       Json?                                  // Gateway-specific data
+  paidAt         DateTime?     @map("paid_at")
+  createdAt      DateTime      @default(now()) @map("created_at")
+
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subscription Subscription? @relation(fields: [subscriptionId], references: [id])
+
+  @@index([userId])
+  @@index([gatewayTxId])
+  @@index([status])
+  @@map("payments")
+}
+
+// ─── CONTENT ────────────────────────────────────────────────
+
+enum CourseStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum LessonType {
+  VIDEO
+  TEXT
+  QUIZ
+  RESOURCE
+}
+
+model Category {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique
+  description String?
+  icon        String?
+  order       Int      @default(0)
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  courses Course[]
+
+  @@map("categories")
+}
+
+model Course {
+  id          String       @id @default(cuid())
+  categoryId  String       @map("category_id")
+  title       String
+  slug        String       @unique
+  description String?
+  thumbnail   String?
+  status      CourseStatus @default(DRAFT)
+  order       Int          @default(0)
+  createdAt   DateTime     @default(now()) @map("created_at")
+  updatedAt   DateTime     @updatedAt @map("updated_at")
+
+  category    Category     @relation(fields: [categoryId], references: [id])
+  modules     Module[]
+  enrollments Enrollment[]
+
+  @@index([categoryId])
+  @@index([status])
+  @@map("courses")
+}
+
+model Module {
+  id          String   @id @default(cuid())
+  courseId     String   @map("course_id")
+  title       String
+  description String?
+  order       Int      @default(0)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  course  Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  lessons Lesson[]
+
+  @@index([courseId])
+  @@map("modules")
+}
+
+model Lesson {
+  id        String     @id @default(cuid())
+  moduleId  String     @map("module_id")
+  title     String
+  type      LessonType @default(VIDEO)
+  videoUrl  String?    @map("video_url")
+  content   String?                       // Rich text / markdown
+  duration  Int?                          // Duration in minutes
+  xp        Int        @default(50)
+  order     Int        @default(0)
+  resources Json?                         // Array of {name, url} for downloadable files
+  createdAt DateTime   @default(now()) @map("created_at")
+  updatedAt DateTime   @updatedAt @map("updated_at")
+
+  module   Module     @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  progress Progress[]
+
+  @@index([moduleId])
+  @@map("lessons")
+}
+
+// ─── PROGRESS & ENROLLMENT ──────────────────────────────────
+
+enum EnrollmentStatus {
+  ACTIVE
+  COMPLETED
+  EXPIRED
+}
+
+model Enrollment {
+  id         String           @id @default(cuid())
+  userId     String           @map("user_id")
+  courseId    String           @map("course_id")
+  status     EnrollmentStatus @default(ACTIVE)
+  enrolledAt DateTime         @default(now()) @map("enrolled_at")
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  course Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, courseId])
+  @@map("enrollments")
+}
+
+model Progress {
+  id          String    @id @default(cuid())
+  userId      String    @map("user_id")
+  lessonId    String    @map("lesson_id")
+  completed   Boolean   @default(false)
+  score       Int?                          // Quiz score (0-100)
+  completedAt DateTime? @map("completed_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lesson Lesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, lessonId])
+  @@index([userId])
+  @@map("progress")
+}
+
+// ─── COMMUNITY ──────────────────────────────────────────────
+
+enum ChannelType {
+  PUBLIC    // All subscribers
+  FREEBOX   // Free users only channel
+  ADMIN     // Admin announcements
+}
+
+model Channel {
+  id          String      @id @default(cuid())
+  name        String
+  slug        String      @unique
+  description String?
+  type        ChannelType @default(PUBLIC)
+  icon        String?
+  order       Int         @default(0)
+  createdAt   DateTime    @default(now()) @map("created_at")
+
+  posts Post[]
+
+  @@map("channels")
+}
+
+model Post {
+  id        String   @id @default(cuid())
+  channelId String   @map("channel_id")
+  userId    String   @map("user_id")
+  content   String
+  imageUrl  String?  @map("image_url")
+  parentId  String?  @map("parent_id")   // For threaded replies
+  isPinned  Boolean  @default(false) @map("is_pinned")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  channel  Channel    @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  user     User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  parent   Post?      @relation("PostReplies", fields: [parentId], references: [id])
+  replies  Post[]     @relation("PostReplies")
+  reactions Reaction[]
+
+  @@index([channelId, createdAt])
+  @@index([parentId])
+  @@map("posts")
+}
+
+model Reaction {
+  id        String   @id @default(cuid())
+  postId    String   @map("post_id")
+  userId    String   @map("user_id")
+  type      String                       // Emoji: "fire", "heart", "brain", "rocket", "clap"
+  createdAt DateTime @default(now()) @map("created_at")
+
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, userId, type])       // One reaction type per user per post
+  @@map("reactions")
+}
+
+// ─── GAMIFICATION ───────────────────────────────────────────
+
+model XpLog {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  amount    Int
+  reason    String                        // "lesson_complete", "module_complete", "streak", etc.
+  metadata  Json?                         // {lessonId, courseId, etc.}
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([createdAt])
+  @@map("xp_logs")
+}
+
+model Badge {
+  id            String   @id @default(cuid())
+  name          String
+  description   String
+  icon          String                    // Emoji or icon name
+  criteriaType  String   @map("criteria_type")   // "lessons_completed", "streak_days", "xp_total", etc.
+  criteriaValue Int      @map("criteria_value")   // Threshold
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  users UserBadge[]
+
+  @@map("badges")
+}
+
+model UserBadge {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  badgeId   String   @map("badge_id")
+  earnedAt  DateTime @default(now()) @map("earned_at")
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  badge Badge @relation(fields: [badgeId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, badgeId])
+  @@map("user_badges")
+}
+
+// ─── ANNOUNCEMENTS ──────────────────────────────────────────
+
+model Announcement {
+  id        String   @id @default(cuid())
+  title     String
+  content   String
+  imageUrl  String?  @map("image_url")
+  isPinned  Boolean  @default(false) @map("is_pinned")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("announcements")
+}

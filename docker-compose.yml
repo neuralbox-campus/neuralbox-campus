@@ -1,0 +1,42 @@
+# ============================================================
+# NeuralBox Campus IA — Docker Compose (Local Dev)
+# Run: docker-compose up -d
+# ============================================================
+
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:16-alpine
+    container_name: neuralbox-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: neuralbox_campus
+      POSTGRES_USER: neuralbox
+      POSTGRES_PASSWORD: neuralbox_dev_2026
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U neuralbox"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Redis (for future: sessions, caching, real-time)
+  redis:
+    image: redis:7-alpine
+    container_name: neuralbox-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:
