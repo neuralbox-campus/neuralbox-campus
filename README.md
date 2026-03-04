@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # NeuralBox Campus IA
 
 Plataforma de aprendizaje en Inteligencia Artificial para el mercado hispano.
@@ -139,3 +140,4 @@ neuralbox-campus/
 - Helmet.js headers
 - Webhook signature verification
 - Input sanitization (XSS prevention)
+
