@@ -51,7 +51,10 @@ async function refreshAccessToken() {
 
 export async function api(path, options = {}) {
   const { body, method = 'GET', auth = true, ...rest } = options;
-  const headers = { 'Content-Type': 'application/json', ...rest.headers };
+  const headers = { ...rest.headers };
+  if (body) {
+    headers['Content-Type'] = 'application/json';
+  }
 
   if (auth && accessToken) {
     headers['Authorization'] = `Bearer ${accessToken}`;

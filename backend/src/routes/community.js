@@ -52,7 +52,7 @@ async function communityRoutes(fastify) {
   });
 
   // ── GET /channels/:slug/posts — Posts in a channel ──
-  fastify.get('/channels/:slug/posts', { preHandler: authenticate }, async (request, reply) => {
+  fastify.get('/channels/:slug/posts', { preHandler: optionalAuth }, async (request, reply) => {
     const { slug } = request.params;
     const { page = 1, limit = 20 } = request.query || {};
 
@@ -61,11 +61,16 @@ async function communityRoutes(fastify) {
       return reply.status(404).send({ success: false, error: 'Canal no encontrado' });
     }
 
-    // Access check
-    const hasSubscription = await checkSubscription(request.user.id);
-    const isAdmin = request.user.role === 'ADMIN';
-    if (channel.type !== 'FREEBOX' && !hasSubscription && !isAdmin) {
-      return reply.status(403).send({ success: false, error: 'Se requiere suscripcion para acceder a este canal', code: 'NO_SUBSCRIPTION' });
+    // Access check — FREEBOX is open to everyone, others require subscription
+    if (channel.type !== 'FREEBOX') {
+      if (!request.user) {
+        return reply.status(401).send({ success: false, error: 'Se requiere autenticacion' });
+      }
+      const hasSubscription = await checkSubscription(request.user.id);
+      const isAdmin = request.user.role === 'ADMIN';
+      if (!hasSubscription && !isAdmin) {
+        return reply.status(403).send({ success: false, error: 'Se requiere suscripcion para acceder a este canal', code: 'NO_SUBSCRIPTION' });
+      }
     }
 
     const skip = (parseInt(page) - 1) * parseInt(limit);
@@ -93,7 +98,7 @@ async function communityRoutes(fastify) {
       let userReactions = [];
       post.reactions.forEach(r => {
         reactionCounts[r.type] = (reactionCounts[r.type] || 0) + 1;
-        if (r.userId === request.user.id) userReactions.push(r.type);
+        if (request.user && r.userId === request.user.id) userReactions.push(r.type);
       });
       const { reactions, ...postData } = post;
       return { ...postData, reactionCounts, userReactions, replyCount: post._count.replies };
