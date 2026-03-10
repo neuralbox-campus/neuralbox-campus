@@ -13,7 +13,7 @@ export default function LessonPage() {
     <div className="nx-player fi"><div className="nx-play-btn">▶</div></div>
     <div className="fi fi1" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
       <div><div style={{ fontSize: 18, fontWeight: 700, marginBottom: 3 }}>{lesson?.title}</div>
-        <div className="nx-mono-sm" style={{ display: 'flex', gap: 12 }}><span>{lesson?.type}</span><span>⏱ {lesson?.duration}m</span><span style={{ color: 'var(--brand)' }}>+{lesson?.xpReward} XP</span></div></div>
+        <div className="nx-mono-sm" style={{ display: 'flex', gap: 12 }}><span>{lesson?.type}</span><span>⏱ {lesson?.duration}m</span><span style={{ color: 'var(--brand)' }}>+{lesson?.xp} XP</span></div></div>
       <button className={`nx-btn ${done ? 'nx-btn-ghost' : 'nx-btn-accent'} nx-btn-sm`} onClick={complete}>{done ? '✓ Completada' : 'Completar'}</button>
     </div>
     <div className="nx-card fi fi2" style={{ lineHeight: 1.7, fontSize: 14, color: 'var(--text-secondary)' }}>

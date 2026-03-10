@@ -9,6 +9,20 @@ const ROLES = {
   GUEST: { name: 'Sin Conexión', icon: '🪦', color: '#4a6578' },
 };
 
+// Derive effective role from backend user data
+function deriveRole(userData) {
+  if (!userData) return 'GUEST';
+  if (userData.role === 'ADMIN') return 'ADMIN';
+  if (userData.hasActiveSubscription) return 'SINAPSIS';
+  return 'GUEST';
+}
+
+function enrichUser(userData) {
+  if (!userData) return null;
+  const role = deriveRole(userData);
+  return { ...userData, role };
+}
+
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -26,8 +40,9 @@ export function AuthProvider({ children }) {
   const fetchUser = useCallback(async () => {
     try {
       const res = await get('/auth/me');
-      setUser(res.data);
-      return res.data;
+      const enriched = enrichUser(res.data);
+      setUser(enriched);
+      return enriched;
     } catch {
       clearTokens();
       setUser(null);
@@ -38,15 +53,19 @@ export function AuthProvider({ children }) {
   const login = useCallback(async (email, password) => {
     const res = await post('/auth/login', { email, password }, { auth: false });
     setTokens(res.data.accessToken, res.data.refreshToken);
-    setUser(res.data.user);
-    return res.data.user;
+    // After login, fetch full user data to get subscription status
+    const meRes = await get('/auth/me');
+    const enriched = enrichUser(meRes.data);
+    setUser(enriched);
+    return enriched;
   }, []);
 
   const register = useCallback(async (name, email, password) => {
     const res = await post('/auth/register', { name, email, password }, { auth: false });
     setTokens(res.data.accessToken, res.data.refreshToken);
-    setUser(res.data.user);
-    return res.data.user;
+    const enriched = enrichUser({ ...res.data.user, hasActiveSubscription: false });
+    setUser(enriched);
+    return enriched;
   }, []);
 
   const logout = useCallback(async () => {
@@ -66,7 +85,7 @@ export function AuthProvider({ children }) {
 
   const isAdmin = user?.role === 'ADMIN';
   const isSinapsis = user?.role === 'SINAPSIS' || isAdmin;
-  const isGuest = user?.role === 'GUEST';
+  const isGuest = user?.role === 'GUEST' || !user;
   const roleInfo = ROLES[user?.role] || ROLES.GUEST;
 
   return (

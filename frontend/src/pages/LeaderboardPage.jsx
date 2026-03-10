@@ -3,9 +3,10 @@ import { useApi } from '../hooks/useApi';
 export default function LeaderboardPage() {
   const [period, setPeriod] = useState('weekly');
   const { data: lb, loading } = useApi(`/progress/leaderboard?period=${period}`, [period]);
+  const leaders = lb?.leaders || (Array.isArray(lb) ? lb : []);
   return (<div style={{ maxWidth: 650 }}><div className="tt fi">🏆 Leaderboard</div><div className="st fi">Top estudiantes NeuralBox</div>
     <div className="tabs fi" style={{ marginBottom: 16 }}>{['weekly','monthly','alltime'].map(x => (<div key={x} className={`tab ${period === x ? 'ac' : ''}`} onClick={() => setPeriod(x)}>{x === 'weekly' ? 'Semanal' : x === 'monthly' ? 'Mensual' : 'All-Time'}</div>))}</div>
-    {loading ? <div className="nx-loading-sm">Cargando...</div> : (lb || []).map((l, i) => (
+    {loading ? <div className="nx-loading-sm">Cargando...</div> : leaders.map((l, i) => (
       <div key={l.id || i} className="nx-lb-row fi">
         <div className={`nx-lb-rank ${i === 0 ? 'g' : i === 1 ? 's' : i === 2 ? 'b' : ''}`}>{i + 1}</div>
         <div style={{ width: 26, height: 26, borderRadius: 'var(--r-sm)', background: 'var(--bg-elevated)', border: '1px solid var(--border-main)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13 }}>{l.avatar || '👤'}</div>

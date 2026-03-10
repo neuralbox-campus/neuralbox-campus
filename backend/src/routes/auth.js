@@ -202,6 +202,27 @@ async function authRoutes(fastify) {
     });
   });
 
+  // ── UPDATE PROFILE ──
+  fastify.put('/me', { preHandler: authenticate }, async (request, reply) => {
+    const updateSchema = z.object({
+      name: z.string().min(2).max(100).trim().optional(),
+      avatar: z.string().max(10).optional()
+    });
+
+    const data = updateSchema.parse(request.body);
+
+    const updated = await prisma.user.update({
+      where: { id: request.user.id },
+      data,
+      select: {
+        id: true, email: true, name: true, avatar: true, role: true,
+        xp: true, level: true, streak: true
+      }
+    });
+
+    reply.send({ success: true, data: updated });
+  });
+
   // ── FORGOT PASSWORD ──
   fastify.post('/forgot-password', {
     config: { rateLimit: { max: 3, timeWindow: '15 minutes' } }

@@ -55,6 +55,21 @@ const channelSchema = z.object({
   order: z.number().int().min(0).optional()
 });
 
+const leadSchema = z.object({
+  email: z.string().email().max(255),
+  name: z.string().max(200).optional(),
+  source: z.string().max(100).optional(),
+  status: z.string().max(50).optional(),
+  notes: z.string().max(2000).optional()
+});
+
+const codeGenerateSchema = z.object({
+  type: z.enum(['preventa', 'descuento']).default('preventa'),
+  email: z.string().email().optional().nullable(),
+  discount: z.number().int().min(0).max(100).optional(),
+  maxUses: z.number().int().min(1).max(10000).optional()
+});
+
 async function adminRoutes(fastify) {
 
   // All admin routes require ADMIN role
@@ -73,7 +88,8 @@ async function adminRoutes(fastify) {
       totalUsers, newUsersThisMonth,
       activeSubscriptions, totalRevenue,
       revenueThisMonth, revenueLastMonth,
-      totalLessons, totalCourses
+      totalLessons, totalCourses,
+      totalLeads, paidLeads, completedLessonsCount
     ] = await Promise.all([
       prisma.user.count({ where: { isActive: true } }),
       prisma.user.count({ where: { createdAt: { gte: thisMonth } } }),
@@ -82,7 +98,10 @@ async function adminRoutes(fastify) {
       prisma.payment.aggregate({ where: { status: 'COMPLETED', paidAt: { gte: thisMonth } }, _sum: { amount: true } }),
       prisma.payment.aggregate({ where: { status: 'COMPLETED', paidAt: { gte: lastMonth, lt: thisMonth } }, _sum: { amount: true } }),
       prisma.lesson.count(),
-      prisma.course.count({ where: { status: 'PUBLISHED' } })
+      prisma.course.count({ where: { status: 'PUBLISHED' } }),
+      prisma.lead.count(),
+      prisma.lead.count({ where: { status: 'pagado' } }),
+      prisma.progress.count({ where: { completed: true } })
     ]);
 
     const mrr = revenueThisMonth._sum.amount || 0;
@@ -95,11 +114,15 @@ async function adminRoutes(fastify) {
         totalUsers,
         newUsersThisMonth,
         activeSubscriptions,
-        totalRevenue: (totalRevenue._sum.amount || 0) / 100, // Convert cents to currency
+        activeSinapsis: activeSubscriptions,
+        totalRevenue: (totalRevenue._sum.amount || 0) / 100,
         mrr: mrr / 100,
         mrrGrowth,
         totalLessons,
-        totalCourses
+        totalCourses,
+        totalLeads,
+        paidLeads,
+        completedLessons: completedLessonsCount
       }
     });
   });
@@ -161,7 +184,16 @@ async function adminRoutes(fastify) {
     const courses = await prisma.course.findMany({
       orderBy: { order: 'asc' },
       include: {
-        category: { select: { name: true } },
+        category: { select: { id: true, name: true } },
+        modules: {
+          orderBy: { order: 'asc' },
+          include: {
+            lessons: {
+              orderBy: { order: 'asc' },
+              select: { id: true, title: true, type: true, duration: true, xp: true, order: true }
+            }
+          }
+        },
         _count: { select: { modules: true, enrollments: true } }
       }
     });
@@ -320,6 +352,66 @@ async function adminRoutes(fastify) {
     });
 
     reply.send({ success: true, data: { isActive: updated.isActive } });
+  });
+
+  // ════════════════════════════════════════════════════════════
+  // LEADS CRUD
+  // ════════════════════════════════════════════════════════════
+
+  fastify.get('/leads', async (req, reply) => {
+    const leads = await prisma.lead.findMany({
+      orderBy: { createdAt: 'desc' }
+    });
+    reply.send({ success: true, data: leads });
+  });
+
+  fastify.post('/leads', async (req, reply) => {
+    const data = leadSchema.parse(req.body);
+    const lead = await prisma.lead.create({ data });
+    reply.status(201).send({ success: true, data: lead });
+  });
+
+  fastify.put('/leads/:id', async (req, reply) => {
+    const data = leadSchema.partial().parse(req.body);
+    const lead = await prisma.lead.update({ where: { id: req.params.id }, data });
+    reply.send({ success: true, data: lead });
+  });
+
+  fastify.delete('/leads/:id', async (req, reply) => {
+    await prisma.lead.delete({ where: { id: req.params.id } });
+    reply.send({ success: true, message: 'Lead eliminado' });
+  });
+
+  // ════════════════════════════════════════════════════════════
+  // CODES CRUD
+  // ════════════════════════════════════════════════════════════
+
+  fastify.get('/codes', async (req, reply) => {
+    const codes = await prisma.code.findMany({
+      orderBy: { createdAt: 'desc' }
+    });
+    reply.send({ success: true, data: codes });
+  });
+
+  fastify.post('/codes', async (req, reply) => {
+    const data = codeGenerateSchema.parse(req.body);
+    const crypto = require('crypto');
+    const code = await prisma.code.create({
+      data: {
+        code: `NB-${crypto.randomBytes(4).toString('hex').toUpperCase()}`,
+        type: data.type,
+        email: data.email || null,
+        assignedTo: data.email || null,
+        discount: data.discount || 0,
+        maxUses: data.maxUses || 1
+      }
+    });
+    reply.status(201).send({ success: true, data: code });
+  });
+
+  fastify.delete('/codes/:id', async (req, reply) => {
+    await prisma.code.delete({ where: { id: req.params.id } });
+    reply.send({ success: true, message: 'Codigo eliminado' });
   });
 }
 

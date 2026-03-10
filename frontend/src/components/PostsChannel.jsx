@@ -6,7 +6,8 @@ const reactionMap = { fire: '🔥', heart: '❤️', brain: '🧠', rocket: '�
 
 export default function PostsChannel({ channelSlug, title, subtitle, allowGuestPost }) {
   const { isAdmin, isGuest, user } = useAuth();
-  const { data: posts, loading, refetch } = useApi(`/community/channels/${channelSlug}/posts`);
+  const { data: postsData, loading, refetch } = useApi(`/community/channels/${channelSlug}/posts`);
+  const posts = postsData?.posts || (Array.isArray(postsData) ? postsData : []);
   const [nc, setNc] = useState('');
   const [nt, setNt] = useState('text');
   const [np, setNp] = useState('');
@@ -19,7 +20,7 @@ export default function PostsChannel({ channelSlug, title, subtitle, allowGuestP
   const { mutate: remove } = useMutation('DELETE');
   const { mutate: react } = useMutation('POST');
 
-  const canPost = isAdmin || (allowGuestPost && isGuest);
+  const canPost = isAdmin || (allowGuestPost && !isGuest);
 
   const pub = async () => {
     if (!nc) return;
@@ -75,15 +76,15 @@ export default function PostsChannel({ channelSlug, title, subtitle, allowGuestP
 
       {loading && <div className="nx-loading-sm">Cargando...</div>}
 
-      {(posts || []).map(p => (
-        <div key={p.id} className={`nx-post fi ${p.pinned ? 'pinned' : ''}`}>
+      {posts.map(p => (
+        <div key={p.id} className={`nx-post fi ${p.isPinned ? 'pinned' : ''}`}>
           <div className="nx-post-header">
-            <div className="nx-post-av">{p.author?.avatar || '👤'}</div>
-            <span className="nx-post-name">{p.author?.name || 'User'}</span>
-            <span className={`nx-post-role-tag ${p.author?.role === 'ADMIN' ? 'bg-y' : 'bg-d'}`}>
-              {p.author?.role === 'ADMIN' ? 'Cuántico' : 'Sinapsis'}
+            <div className="nx-post-av">{p.user?.avatar || '👤'}</div>
+            <span className="nx-post-name">{p.user?.name || 'User'}</span>
+            <span className={`nx-post-role-tag ${p.user?.role === 'ADMIN' ? 'bg-y' : 'bg-d'}`}>
+              {p.user?.role === 'ADMIN' ? 'Cuántico' : 'Sinapsis'}
             </span>
-            {p.pinned && <span style={{ fontFamily: 'var(--font-display)', fontSize: 6, letterSpacing: 2, color: 'var(--brand)' }}>📌</span>}
+            {p.isPinned && <span style={{ fontFamily: 'var(--font-display)', fontSize: 6, letterSpacing: 2, color: 'var(--brand)' }}>📌</span>}
             <span className="nx-post-time">{new Date(p.createdAt).toLocaleDateString('es')}</span>
             {isAdmin && (
               <div style={{ marginLeft: 'auto', display: 'flex', gap: 2 }}>
@@ -109,19 +110,13 @@ export default function PostsChannel({ channelSlug, title, subtitle, allowGuestP
           )}
 
           {p.imageUrl && <img src={p.imageUrl} alt="" className="nx-post-img" onError={e => { e.target.style.display = 'none'; }} />}
-          {p.linkUrl && <a href={p.linkUrl} target="_blank" rel="noopener noreferrer" className="nx-post-link">🔗 {p.linkUrl.replace(/^https?:\/\//, '').slice(0, 35)}</a>}
-          {p.type === 'prompt' && p.promptText && (
-            <div className="nx-prompt-block">
-              {p.promptText}
-              <button className="nx-prompt-copy" onClick={() => cp(p.promptText)}>{cop === p.promptText ? '✓' : '📋'}</button>
-            </div>
-          )}
 
           <div className="nx-post-actions">
             {Object.entries(reactionMap).map(([type, emoji]) => {
-              const count = (p.reactions || []).filter(r => r.type === type).length;
+              const count = p.reactionCounts?.[type] || 0;
+              const active = p.userReactions?.includes(type);
               return (
-                <div key={type} className="nx-reaction" onClick={() => doReact(p.id, type)}>
+                <div key={type} className={`nx-reaction ${active ? 'active' : ''}`} onClick={() => doReact(p.id, type)}>
                   <span>{emoji}</span>{count > 0 && <span className="ct">{count}</span>}
                 </div>
               );

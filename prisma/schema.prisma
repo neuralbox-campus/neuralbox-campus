@@ -383,3 +383,40 @@ model Announcement {
 
   @@map("announcements")
 }
+
+// ─── LEADS ─────────────────────────────────────────────────
+
+model Lead {
+  id        String   @id @default(cuid())
+  email     String
+  name      String?
+  source    String   @default("Landing")
+  status    String   @default("nuevo")     // nuevo, contactado, pagado, descartado
+  notes     String?
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([email])
+  @@index([status])
+  @@map("leads")
+}
+
+// ─── CODES ─────────────────────────────────────────────────
+
+model Code {
+  id         String   @id @default(cuid())
+  code       String   @unique
+  type       String   @default("preventa")  // preventa, descuento
+  email      String?                         // Assigned to specific email
+  discount   Int      @default(0)            // Discount percentage (for descuento type)
+  maxUses    Int      @default(1) @map("max_uses")
+  uses       Int      @default(0)
+  status     String   @default("active")     // active, used, expired
+  assignedTo String?  @map("assigned_to")
+  expiresAt  DateTime? @map("expires_at")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([code])
+  @@index([status])
+  @@map("codes")
+}

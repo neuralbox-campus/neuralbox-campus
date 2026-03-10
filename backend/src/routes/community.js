@@ -119,6 +119,65 @@ async function communityRoutes(fastify) {
     reply.send({ success: true, data: replies });
   });
 
+  // ── POST /channels/:slug/posts — Create post by channel slug ──
+  fastify.post('/channels/:slug/posts', {
+    preHandler: authenticate,
+    config: { rateLimit: { max: 2, timeWindow: '1 minute' } }
+  }, async (request, reply) => {
+    const channel = await prisma.channel.findUnique({ where: { slug: request.params.slug } });
+    if (!channel) {
+      return reply.status(404).send({ success: false, error: 'Canal no encontrado' });
+    }
+
+    const hasSubscription = await checkSubscription(request.user.id);
+    const isAdmin = request.user.role === 'ADMIN';
+    if (channel.type !== 'FREEBOX' && !hasSubscription && !isAdmin) {
+      return reply.status(403).send({ success: false, error: 'Se requiere suscripcion para publicar en este canal' });
+    }
+
+    const bodySchema = z.object({
+      content: z.string().min(1).max(5000),
+      type: z.string().optional(),
+      promptText: z.string().max(5000).optional().nullable(),
+      imageUrl: z.string().url().optional().nullable(),
+      linkUrl: z.string().url().optional().nullable()
+    });
+    const data = bodySchema.parse(request.body);
+    const sanitizedContent = escapeHtml(data.content);
+
+    const post = await prisma.post.create({
+      data: {
+        channelId: channel.id,
+        userId: request.user.id,
+        content: sanitizedContent,
+        imageUrl: data.imageUrl || null
+      },
+      include: {
+        user: { select: { id: true, name: true, avatar: true, level: true, role: true } }
+      }
+    });
+
+    // Grant XP for posting (max 5/day)
+    if (hasSubscription || isAdmin) {
+      const todayStart = new Date();
+      todayStart.setHours(0, 0, 0, 0);
+      const todayPosts = await prisma.xpLog.count({
+        where: { userId: request.user.id, reason: 'post_create', createdAt: { gte: todayStart } }
+      });
+      if (todayPosts < 5) {
+        await prisma.xpLog.create({
+          data: { userId: request.user.id, amount: 10, reason: 'post_create', metadata: { postId: post.id } }
+        });
+        await prisma.user.update({
+          where: { id: request.user.id },
+          data: { xp: { increment: 10 } }
+        });
+      }
+    }
+
+    reply.status(201).send({ success: true, data: post });
+  });
+
   // ── POST /posts — Create post ──
   fastify.post('/posts', {
     preHandler: authenticate,

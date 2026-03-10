@@ -28,6 +28,28 @@ async function contentRoutes(fastify) {
     reply.send({ success: true, data: categories });
   });
 
+  // ── GET /courses — List all published courses with modules ──
+  fastify.get('/courses', async (request, reply) => {
+    const courses = await prisma.course.findMany({
+      where: { status: 'PUBLISHED' },
+      orderBy: { order: 'asc' },
+      include: {
+        category: { select: { id: true, name: true, slug: true } },
+        modules: {
+          orderBy: { order: 'asc' },
+          include: {
+            lessons: {
+              orderBy: { order: 'asc' },
+              select: { id: true, title: true, type: true, duration: true, xp: true, order: true }
+            }
+          }
+        },
+        _count: { select: { enrollments: true } }
+      }
+    });
+    reply.send({ success: true, data: courses });
+  });
+
   // ── GET /courses/:slug — Course detail with modules ──
   fastify.get('/courses/:slug', { preHandler: optionalAuth }, async (request, reply) => {
     const course = await prisma.course.findUnique({
@@ -78,6 +100,26 @@ async function contentRoutes(fastify) {
         userProgress
       }
     });
+  });
+
+  // ── GET /modules/:moduleId/lessons — List lessons in a module ──
+  fastify.get('/modules/:moduleId/lessons', { preHandler: optionalAuth }, async (request, reply) => {
+    const module = await prisma.module.findUnique({
+      where: { id: request.params.moduleId },
+      include: {
+        course: { select: { id: true, title: true, slug: true } },
+        lessons: {
+          orderBy: { order: 'asc' },
+          select: { id: true, title: true, type: true, duration: true, xp: true, order: true }
+        }
+      }
+    });
+
+    if (!module) {
+      return reply.status(404).send({ success: false, error: 'Modulo no encontrado' });
+    }
+
+    reply.send({ success: true, data: { module, lessons: module.lessons } });
   });
 
   // ── GET /lessons/:id — Full lesson content (PREMIUM) ──
